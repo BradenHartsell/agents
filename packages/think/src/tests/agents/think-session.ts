@@ -3633,7 +3633,7 @@ function createAttachReplyMockModel(): LanguageModel {
 // Calls the `pauseAction` durable-pause action on the first model step, then
 // emits text on every later step (within the parking turn and on the
 // connection-independent continuation after approval).
-function createDurablePauseMockModel(): LanguageModel {
+function createDurablePauseMockModel(onCall: () => void): LanguageModel {
   let callCount = 0;
   return {
     specificationVersion: "v3",
@@ -3644,6 +3644,7 @@ function createDurablePauseMockModel(): LanguageModel {
       throw new Error("doGenerate not implemented");
     },
     doStream(options: Record<string, unknown>) {
+      onCall();
       callCount++;
       const messages = (options as { prompt?: unknown[] }).prompt ?? [];
       const hasToolResult = messages.some(
@@ -3812,7 +3813,11 @@ export class ThinkToolsTestAgent extends Think {
 
   override getModel(): LanguageModel {
     if (this._useAttachReplyAction) return createAttachReplyMockModel();
-    if (this._useDurablePauseAction) return createDurablePauseMockModel();
+    if (this._useDurablePauseAction) {
+      return createDurablePauseMockModel(() => {
+        this._durablePauseModelCallCount++;
+      });
+    }
     return createToolCallingMockModel();
   }
 
@@ -4158,6 +4163,7 @@ export class ThinkToolsTestAgent extends Think {
     undefined;
   private _durablePauseIdempotencyKey: string | null = null;
   private _durablePauseExecCount = 0;
+  private _durablePauseModelCallCount = 0;
   private _durablePauseExecThrows = false;
   private _durablePauseAttachReply = false;
   private _actionDelayMs = 25;
@@ -4405,6 +4411,14 @@ export class ThinkToolsTestAgent extends Think {
     return this._durablePauseExecCount;
   }
 
+  async getDurablePauseModelCallCount(): Promise<number> {
+    return this._durablePauseModelCallCount;
+  }
+
+  async waitUntilStableForTest(): Promise<boolean> {
+    return this.waitUntilStable({ timeout: 5_000 });
+  }
+
   /** Compile tools and directly invoke the durable-pause action to park it. */
   async parkDurablePauseForTest(
     message = "hello",
@@ -4454,9 +4468,10 @@ export class ThinkToolsTestAgent extends Think {
 
   async rejectExecutionForTest(
     executionId: string,
-    reason?: string
+    reason?: string,
+    options?: { autoContinue?: boolean }
   ): Promise<unknown> {
-    return this.rejectExecution(executionId, reason);
+    return this.rejectExecution(executionId, reason, options);
   }
 
   async approveExecutionTwiceForTest(executionId: string): Promise<unknown[]> {

@@ -1262,6 +1262,15 @@ export interface PendingApproval {
   descriptor: ActionApprovalDescriptor;
 }
 
+export interface RejectExecutionOptions {
+  /**
+   * Whether Think starts a model continuation after recording the rejection.
+   * Defaults to `true`. Set this to `false` when the caller wants the
+   * conversation to remain paused until a later user turn.
+   */
+  autoContinue?: boolean;
+}
+
 export interface ActionConfig<
   InputSchema extends FlexibleSchema = FlexibleSchema,
   Output = unknown
@@ -12659,15 +12668,18 @@ export class Think<
    * transcript's paused output is replaced with
    * `{ status: "rejected", executionId, reason }` and the chat
    * auto-continues so the model can adapt (or explain) instead of erroring.
+   * Pass `{ autoContinue: false }` to record the rejection without starting a
+   * model continuation.
    *
    * Client-callable.
    */
   async rejectExecution(
     executionId: string,
-    reason?: string
+    reason?: string,
+    options?: RejectExecutionOptions
   ): Promise<unknown> {
     if (executionId.startsWith(ACTION_PAUSE_ID_PREFIX)) {
-      return await this._rejectActionPause(executionId, reason);
+      return await this._rejectActionPause(executionId, reason, options);
     }
     const runtime = this._codemodeRuntime();
     if (!runtime) {
@@ -12709,7 +12721,7 @@ export class Think<
       executionId,
       reason: reason ?? "Rejected by user"
     };
-    await this._applyExecutionOutcome(executionId, output);
+    await this._applyExecutionOutcome(executionId, output, options);
     return output;
   }
 
@@ -12721,7 +12733,8 @@ export class Think<
    */
   private async _rejectActionPause(
     executionId: string,
-    reason?: string
+    reason?: string,
+    options?: RejectExecutionOptions
   ): Promise<unknown> {
     const row = this._claimActionPendingRow(executionId);
     if (!row) {
@@ -12741,7 +12754,7 @@ export class Think<
       type: "action:pause:rejected",
       payload: { action: row.action_name, executionId }
     });
-    await this._applyExecutionOutcome(executionId, output);
+    await this._applyExecutionOutcome(executionId, output, options);
     return output;
   }
 
@@ -12758,7 +12771,8 @@ export class Think<
    */
   private async _applyExecutionOutcome(
     executionId: string,
-    output: unknown
+    output: unknown,
+    options?: RejectExecutionOptions
   ): Promise<boolean> {
     const toolCallId = this._findPausedExecutionToolCall(executionId);
     if (!toolCallId) {
@@ -12791,6 +12805,7 @@ export class Think<
         )
       );
     }
+    if (options?.autoContinue === false) return true;
     // Continue on the approving connection when there is one (WS callable),
     // else any open connection (DO-stub approval with clients attached). When
     // NO connection is open — an approval arriving via RPC from a dashboard,
