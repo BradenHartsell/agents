@@ -12805,7 +12805,12 @@ export class Think<
         )
       );
     }
-    if (options?.autoContinue === false) return true;
+    if (options?.autoContinue === false) {
+      // Re-arm the barrier so a sibling that already opted in fires once the
+      // batch is whole, matching the client tool-result/approval path.
+      this._rearmPendingAutoContinuationForBatch();
+      return true;
+    }
     // Continue on the approving connection when there is one (WS callable),
     // else any open connection (DO-stub approval with clients attached). When
     // NO connection is open — an approval arriving via RPC from a dashboard,
