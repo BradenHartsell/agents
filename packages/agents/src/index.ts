@@ -5065,6 +5065,22 @@ export class Agent<
     }
   }
 
+  /**
+   * @internal Whether `broadcast(msg, without)` may reach a client. `false`
+   * only when it certainly would not, so a caller can skip building a frame
+   * nobody reads. On a facet this is the check `broadcast` makes before it
+   * calls the root (#2252).
+   */
+  _hasBroadcastRecipients(without?: string[]): boolean {
+    if (this._isFacet) {
+      return !this._dynamicAgents.broadcastHasNoRecipients(without);
+    }
+    for (const connection of this.getConnections()) {
+      if (!without?.includes(connection.id)) return true;
+    }
+    return false;
+  }
+
   getConnection<TState = unknown>(id: string): Connection<TState> | undefined {
     if (this._isFacet) {
       // Do not read lifecycle-owned root connections from a facet — that

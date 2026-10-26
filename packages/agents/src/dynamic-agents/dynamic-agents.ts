@@ -1041,7 +1041,7 @@ export class DynamicAgentsInternal extends LifecycleCapability {
     message: string | ArrayBuffer | ArrayBufferView,
     without?: string[]
   ): Promise<void> {
-    if (this.#broadcastHasNoRecipients(without)) return;
+    if (this.broadcastHasNoRecipients(without)) return;
     await this.routeBroadcast(this.#host.selfPath, message, without);
   }
 
@@ -1052,7 +1052,7 @@ export class DynamicAgentsInternal extends LifecycleCapability {
    * yet, so it has not been through `onConnect`. Synchronous so a skipped
    * broadcast never reorders later operations.
    */
-  #broadcastHasNoRecipients(without: string[] | undefined): boolean {
+  broadcastHasNoRecipients(without: string[] | undefined): boolean {
     if (!this.#virtualConnectionsHydrated) {
       this.#hydrateVirtualConnectionsInBackground();
       return false;

@@ -19922,6 +19922,7 @@ import { createAITools } from "@cloudflare/computer/tools/ai-sdk";
       ...(exclude || []),
       ...this._pendingResumeConnections
     ];
+    if (!this._chatFrameHasReader(allExclusions)) return;
     this.broadcast(
       JSON.stringify(this._withOriginMessageIds(message)),
       allExclusions
@@ -19957,7 +19958,27 @@ import { createAITools } from "@cloudflare/computer/tools/ai-sdk";
   }
 
   private _broadcast(message: Record<string, unknown>, exclude?: string[]) {
+    if (!this._chatFrameHasReader(exclude)) return;
     this.broadcast(JSON.stringify(message), exclude);
+  }
+
+  /**
+   * Whether a chat frame broadcast now has a reader. Serializing the frame
+   * (for `_broadcastMessages`, the whole cached transcript) is skipped only
+   * when nothing would read it: no client outside `exclude`, no agent-tool
+   * run intercepting frames in {@link broadcast}, and no subclass override
+   * of `broadcast` that may observe them.
+   */
+  private _chatFrameHasReader(exclude?: string[]): boolean {
+    if (
+      this.broadcast !== Think.prototype.broadcast ||
+      this._agentToolForwarders.size > 0 ||
+      this._agentToolLiveSequences.size > 0 ||
+      this._agentToolTerminalOnlyRuns.size > 0
+    ) {
+      return true;
+    }
+    return this._hasBroadcastRecipients(exclude);
   }
 
   private _broadcastMessages(exclude?: string[]) {

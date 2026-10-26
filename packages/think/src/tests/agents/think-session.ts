@@ -2323,6 +2323,33 @@ export class ThinkTestAgent extends Think {
     };
   }
 
+  /**
+   * Runs one `chat()` turn and counts the chat frames serialized for
+   * broadcast while it runs, by frame type.
+   */
+  async countChatFrameSerializationsForTest(
+    message: string
+  ): Promise<Record<string, number>> {
+    const counts: Record<string, number> = {};
+    const stringify = JSON.stringify;
+    JSON.stringify = ((...args: Parameters<typeof stringify>) => {
+      const type = (args[0] as { type?: unknown } | null | undefined)?.type;
+      if (
+        type === "cf_agent_chat_messages" ||
+        type === "cf_agent_use_chat_response"
+      ) {
+        counts[type] = (counts[type] ?? 0) + 1;
+      }
+      return stringify(...args);
+    }) as typeof JSON.stringify;
+    try {
+      await this.testChat(message);
+    } finally {
+      JSON.stringify = stringify;
+    }
+    return counts;
+  }
+
   private _readChildRunStatusForTest(runId: string): string | null {
     const rows = this.sql<{ status: string }>`
       SELECT status FROM cf_agent_tool_child_runs WHERE run_id = ${runId}
